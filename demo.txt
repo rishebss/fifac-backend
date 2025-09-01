@@ -1,0 +1,44 @@
+// server.js
+// 1. IMPORT EXPRESS and our database connection
+import express from 'express';
+import { db } from './firebase.js'; // Import the initialized 'db' from our config file
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+// 2. CREATE AN EXPRESS APPLICATION
+const app = express();
+const PORT = process.env.PORT || 3001 ;
+
+// 3. MIDDLEWARE
+app.use(express.json());
+
+// 4. THE SAME TEST ROUTE (now using the imported 'db')
+app.get('/api/test-db', async (req, res) => {
+  try {
+    const leadsCollection = db.collection('leads'); // Use the imported 'db'
+    const snapshot = await leadsCollection.get();
+
+    let leads = [];
+    snapshot.forEach(doc => {
+      leads.push({ id: doc.id, ...doc.data() });
+    });
+
+    res.json({ message: 'Database connection successful!', leads });
+
+  } catch (error) {
+    console.error('Error connecting to Firestore:', error);
+    res.status(500).json({ error: 'Failed to connect to the database.' });
+  }
+});
+
+// Keep your original test route
+app.get('/api', (req, res) => {
+  res.json({ message: 'Hello from the FIFAC CRM backend server!' });
+});
+
+// 5. START THE SERVER
+app.listen(PORT, () => {
+  console.log(`Server is listening on port ${PORT}!`);
+  console.log(`Test DB connection: http://localhost:${PORT}/api/test-db`);
+});
