@@ -12,6 +12,56 @@ import { authenticateToken } from '../middlewares/authMiddleware.js';
 const router = express.Router();
 const attendanceCollection = db.collection('attendance');
 
+// GET /api/attendance - General attendance query with flexible parameters
+router.get('/', authenticateToken, async (req, res) => {
+  try {
+    console.log('📡 Received attendance request:', req.query);
+    const { studentId, startDate, endDate, year, month } = req.query;
+    
+    if (!studentId) {
+      console.log('❌ Missing studentId parameter');
+      return res.status(400).json({ 
+        success: false,
+        error: 'Student ID is required.' 
+      });
+    }
+    
+    let attendance;
+    
+    if (year && month) {
+      // Use year/month format
+      console.log('📅 Using year/month format:', { year: parseInt(year), month: parseInt(month) });
+      attendance = await getStudentAttendance(studentId, parseInt(year), parseInt(month));
+    } else if (startDate && endDate) {
+      // Use date range format - convert to year/month for existing function
+      const start = new Date(startDate);
+      const year = start.getFullYear();
+      const month = start.getMonth() + 1;
+      console.log('📅 Using startDate/endDate format, converted to:', { year, month });
+      attendance = await getStudentAttendance(studentId, year, month);
+    } else {
+      console.log('❌ Missing required date parameters');
+      return res.status(400).json({ 
+        success: false,
+        error: 'Either (year and month) or (startDate and endDate) parameters are required.' 
+      });
+    }
+    
+    console.log('✅ Retrieved attendance records:', attendance.length);
+    res.json({ 
+      success: true,
+      message: 'Attendance retrieved successfully!',
+      data: attendance 
+    });
+  } catch (error) {
+    console.error('❌ Error getting attendance:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to retrieve attendance records.' 
+    });
+  }
+});
+
 
 
 // GET /api/attendance/student/:studentId - Get attendance for a student
