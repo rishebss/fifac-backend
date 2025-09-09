@@ -12,9 +12,7 @@ export const authenticateToken = (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // JWT validation is sufficient - no need to query database every time
-    // The token already contains verified user information
+
     req.user = { id: decoded.userId, email: decoded.email, username: decoded.username, ...decoded };
     next();
 
