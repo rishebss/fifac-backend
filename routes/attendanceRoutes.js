@@ -55,9 +55,11 @@ router.get('/', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error getting attendance:', error);
+    console.error('❌ Error stack:', error.stack);
     res.status(500).json({ 
       success: false,
-      error: 'Failed to retrieve attendance records.' 
+      error: 'Failed to retrieve attendance records.',
+      details: error.message // Add more details for debugging
     });
   }
 });
@@ -70,6 +72,8 @@ router.get('/student/:studentId', authenticateToken, async (req, res) => {
     const { studentId } = req.params;
     const { year, month } = req.query;
     
+    console.log(`📡 Getting attendance for student ${studentId}, year: ${year}, month: ${month}`);
+    
     if (!year || !month) {
       return res.status(400).json({ 
         success: false,
@@ -79,16 +83,19 @@ router.get('/student/:studentId', authenticateToken, async (req, res) => {
     
     const attendance = await getStudentAttendance(studentId, parseInt(year), parseInt(month));
     
+    console.log(`✅ Successfully retrieved ${attendance.length} attendance records`);
     res.json({ 
       success: true,
       message: 'Attendance retrieved successfully!',
       data: attendance 
     });
   } catch (error) {
-    console.error('Error getting attendance:', error);
+    console.error('❌ Error getting attendance for student:', error);
+    console.error('❌ Error stack:', error.stack);
     res.status(500).json({ 
       success: false,
-      error: 'Failed to retrieve attendance records.' 
+      error: 'Failed to retrieve attendance records.',
+      details: error.message
     });
   }
 });

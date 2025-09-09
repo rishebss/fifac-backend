@@ -4,74 +4,104 @@ const attendanceCollection = db.collection('attendance');
 
 // Data Access Layer Functions
 
-// 1. GET ATTENDANCE FOR A STUDENT - OPTIMIZED
+// 1. GET ATTENDANCE FOR A STUDENT - OPTIMIZED with Better Error Handling
 export const getStudentAttendance = async (studentId, year, month) => {
   try {
+    console.log(`🔍 Getting attendance for student ${studentId}, year: ${year}, month: ${month}`);
+    
     const startDate = new Date(year, month - 1, 1).toISOString();
     const endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
     
-    // OPTIMIZED: Use compound query with date range to reduce data transfer
-    const snapshot = await attendanceCollection
-      .where('studentId', '==', studentId)
-      .where('date', '>=', startDate)
-      .where('date', '<=', endDate)
-      .orderBy('date', 'asc')
-      .get();
+    console.log(`📅 Date range: ${startDate} to ${endDate}`);
+    
+    // Try OPTIMIZED compound query first
+    try {
+      console.log('🚀 Attempting optimized compound query...');
+      const snapshot = await attendanceCollection
+        .where('studentId', '==', studentId)
+        .where('date', '>=', startDate)
+        .where('date', '<=', endDate)
+        .orderBy('date', 'asc')
+        .get();
 
-    if (snapshot.empty) {
-      return [];
-    }
+      console.log(`✅ Optimized query successful, found ${snapshot.size} records`);
+      
+      if (snapshot.empty) {
+        return [];
+      }
 
-    // Convert to array - much smaller dataset now
-    const attendance = [];
-    snapshot.forEach(doc => {
-      attendance.push({ 
-        id: doc.id, 
-        ...doc.data() 
+      // Convert to array - much smaller dataset now
+      const attendance = [];
+      snapshot.forEach(doc => {
+        attendance.push({ 
+          id: doc.id, 
+          ...doc.data() 
+        });
       });
-    });
 
-    return attendance;
+      return attendance;
+      
+    } catch (indexError) {
+      // Check if it's specifically an index error
+      if (indexError.code === 'failed-precondition' || 
+          indexError.message.includes('index') ||
+          indexError.message.includes('composite')) {
+        console.warn('⚠️ Composite index not found, falling back to client-side filtering');
+        return await getStudentAttendanceFallback(studentId, year, month);
+      } else {
+        // If it's a different error, log it and try fallback anyway
+        console.error('❌ Unexpected error in optimized query:', indexError);
+        console.log('🔄 Attempting fallback method...');
+        return await getStudentAttendanceFallback(studentId, year, month);
+      }
+    }
 
   } catch (error) {
-    console.error("Error in getStudentAttendance model:", error);
-    
-    // Fallback to the old method if composite index doesn't exist
-    if (error.code === 'failed-precondition' && error.message.includes('index')) {
-      console.warn("Composite index not found, falling back to client-side filtering");
-      return await getStudentAttendanceFallback(studentId, year, month);
-    }
-    
-    throw new Error('Failed to retrieve attendance records.');
+    console.error("💥 Critical error in getStudentAttendance model:", error);
+    throw new Error(`Failed to retrieve attendance records: ${error.message}`);
   }
 };
 
-// Fallback function for when composite index doesn't exist
+// Fallback function for when composite index doesn't exist - Enhanced
 const getStudentAttendanceFallback = async (studentId, year, month) => {
-  const startDate = new Date(year, month - 1, 1).toISOString();
-  const endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
-  
-  const snapshot = await attendanceCollection
-    .where('studentId', '==', studentId)
-    .get();
+  try {
+    console.log('🔄 Using fallback method for attendance retrieval...');
+    
+    const startDate = new Date(year, month - 1, 1).toISOString();
+    const endDate = new Date(year, month, 0, 23, 59, 59).toISOString();
+    
+    console.log(`📊 Fallback - fetching all records for student ${studentId}`);
+    
+    const snapshot = await attendanceCollection
+      .where('studentId', '==', studentId)
+      .get();
 
-  if (snapshot.empty) {
-    return [];
-  }
+    console.log(`📦 Fallback - fetched ${snapshot.size} total records`);
 
-  const attendance = [];
-  snapshot.forEach(doc => {
-    const data = doc.data();
-    const docDate = data.date;
-    if (docDate >= startDate && docDate <= endDate) {
-      attendance.push({ 
-        id: doc.id, 
-        ...data 
-      });
+    if (snapshot.empty) {
+      console.log('📭 No records found for student');
+      return [];
     }
-  });
 
-  return attendance.sort((a, b) => new Date(a.date) - new Date(b.date));
+    const attendance = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const docDate = data.date;
+      if (docDate >= startDate && docDate <= endDate) {
+        attendance.push({ 
+          id: doc.id, 
+          ...data 
+        });
+      }
+    });
+
+    console.log(`✅ Fallback - filtered to ${attendance.length} records in date range`);
+    return attendance.sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+  } catch (fallbackError) {
+    console.error('💥 Error in fallback method:', fallbackError);
+    throw new Error(`Fallback method failed: ${fallbackError.message}`);
+  }
 };
 
 // 2. MARK ATTENDANCE - OPTIMIZED
