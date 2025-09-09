@@ -4,14 +4,34 @@ import { authenticateToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// GET /api/payments - Get all payments (ordered by latest first)
+// GET /api/payments - Get all payments with pagination
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const payments = await getPayments();
+    // OPTIMIZED: Add pagination support
+    const { limit = 100, offset = 0, orderBy = 'createdAt', orderDirection = 'desc' } = req.query;
+    
+    const payments = await getPayments(
+      parseInt(limit), 
+      parseInt(offset), 
+      orderBy, 
+      orderDirection
+    );
+    
+    // Add caching headers for better performance
+    res.set({
+      'Cache-Control': 'public, max-age=300', // 5 minutes
+      'ETag': `payments-${payments.length}-${Date.now()}`
+    });
+    
     res.json({ 
       success: true,
       message: 'Payments retrieved successfully!',
-      data: payments 
+      data: payments,
+      meta: {
+        count: payments.length,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      }
     });
   } catch (error) {
     console.error('Error getting payments:', error);
@@ -67,10 +87,10 @@ router.get('/student/:studentId', authenticateToken, async (req, res) => {
     }
 });
 
-// GET /api/payments/date-range - Get payments by date range
+// GET /api/payments/date-range - Get payments by date range with optimization
 router.get('/date-range', authenticateToken, async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate, limit = 100 } = req.query;
         
         // Validate required query parameters
         if (!startDate || !endDate) {
@@ -80,12 +100,24 @@ router.get('/date-range', authenticateToken, async (req, res) => {
             });
         }
         
-        const payments = await getPaymentsByDateRange(startDate, endDate);
+        const payments = await getPaymentsByDateRange(startDate, endDate, parseInt(limit));
+        
+        // Add caching headers
+        res.set({
+          'Cache-Control': 'public, max-age=300', // 5 minutes
+          'ETag': `payments-range-${payments.length}-${Date.now()}`
+        });
         
         res.json({ 
         success: true,
         message: 'Payments for date range retrieved successfully!',
-        data: payments 
+        data: payments,
+        meta: {
+          count: payments.length,
+          startDate,
+          endDate,
+          limit: parseInt(limit)
+        }
         });
     } catch (error) {
         console.error('Error getting payments by date range:', error);

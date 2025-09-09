@@ -6,20 +6,26 @@ import attendanceRoutes from './routes/attendanceRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import cors from 'cors';
 import authRoutes from './routes/authRoutes.js';
+import compression from 'compression';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// OPTIMIZED: Add response compression for better performance
-app.use((req, res, next) => {
-  // Enable gzip compression for text responses
-  if (req.headers['accept-encoding'] && req.headers['accept-encoding'].includes('gzip')) {
-    res.setHeader('Content-Encoding', 'gzip');
-  }
-  next();
-});
+// OPTIMIZED: Use proper compression middleware for better performance
+app.use(compression({
+  filter: (req, res) => {
+    // Don't compress responses with Cache-Control: no-transform
+    if (res.getHeader('Cache-Control') && res.getHeader('Cache-Control').includes('no-transform')) {
+      return false;
+    }
+    // Compress all other responses
+    return compression.filter(req, res);
+  },
+  threshold: 1024, // Only compress responses larger than 1KB
+  level: 6 // Compression level (1-9, 6 is good balance)
+}));
 
 // Middleware
 app.use(express.json({ limit: '10mb' })); // Add limit for security
@@ -28,11 +34,12 @@ app.use(cors({
   credentials: true
 }));
 
-// OPTIMIZED: Add basic caching headers for GET requests
+// OPTIMIZED: Add enhanced caching headers for GET requests
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.url.includes('/auth/')) {
-    // Cache GET requests (except auth) for 5 minutes
-    res.setHeader('Cache-Control', 'public, max-age=300');
+    // Cache GET requests (except auth) for 5 minutes with stale-while-revalidate
+    res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+    res.setHeader('Vary', 'Accept-Encoding');
   } else {
     // No cache for POST/PUT/DELETE and auth endpoints
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');

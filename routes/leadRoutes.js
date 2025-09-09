@@ -5,14 +5,34 @@ import { authenticateToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// GET /api/leads - Get all leads
+// GET /api/leads - Get all leads with pagination
 router.get('/',authenticateToken, async (req, res) => {
   try {
-    const leads = await getLeads();
+    // OPTIMIZED: Add pagination support
+    const { limit = 100, offset = 0, orderBy = 'createdAt', orderDirection = 'desc' } = req.query;
+    
+    const leads = await getLeads(
+      parseInt(limit), 
+      parseInt(offset), 
+      orderBy, 
+      orderDirection
+    );
+    
+    // Add caching headers for better performance
+    res.set({
+      'Cache-Control': 'public, max-age=300', // 5 minutes
+      'ETag': `leads-${leads.length}-${Date.now()}`
+    });
+    
     res.json({ 
       success: true,
       message: 'Leads retrieved successfully!',
-      data: leads 
+      data: leads,
+      meta: {
+        count: leads.length,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      }
     });
   } catch (error) {
     console.error('Error getting leads:', error);

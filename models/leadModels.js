@@ -7,11 +7,20 @@ const leadsCollection = db.collection('leads');
 
 // Data Access Layer (Model) Functions
 
-// 1. GET ALL LEADS
-export const getLeads = async () => {
+// 1. GET ALL LEADS - OPTIMIZED with pagination
+export const getLeads = async (limit = 100, offset = 0, orderBy = 'createdAt', orderDirection = 'desc') => {
   try {
-    // Get a snapshot of the entire collection
-    const snapshot = await leadsCollection.orderBy('createdAt','desc').get();
+    // OPTIMIZED: Add pagination and ordering
+    let query = leadsCollection.orderBy(orderBy, orderDirection);
+    
+    if (offset > 0) {
+      // For pagination, limit the results
+      query = query.limit(limit + offset);
+    } else {
+      query = query.limit(limit);
+    }
+    
+    const snapshot = await query.get();
 
     // If the snapshot is empty, return an empty array
     if (snapshot.empty) {
@@ -20,12 +29,17 @@ export const getLeads = async () => {
 
     // Map through the documents and return an array of lead objects
     const leads = [];
+    let count = 0;
+    
     snapshot.forEach(doc => {
-      // For each document, push an object containing the Firestore-generated ID and the document data
-      leads.push({ 
-        id: doc.id, 
-        ...doc.data() 
-      });
+      // Skip offset number of records for simple pagination
+      if (count >= offset && leads.length < limit) {
+        leads.push({ 
+          id: doc.id, 
+          ...doc.data() 
+        });
+      }
+      count++;
     });
 
     return leads;
