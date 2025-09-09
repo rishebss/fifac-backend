@@ -5,14 +5,34 @@ import { authenticateToken } from '../middlewares/authMiddleware.js';
 const router = express.Router();
 
 
-// GET /api/students - Get all students
+// GET /api/students - Get all students with pagination
 router.get('/',authenticateToken, async (req, res) => {
   try {
-    const students = await getStudents();
+    // OPTIMIZED: Add pagination support
+    const { limit = 100, offset = 0, orderBy = 'createdAt', orderDirection = 'desc' } = req.query;
+    
+    const students = await getStudents(
+      parseInt(limit), 
+      parseInt(offset), 
+      orderBy, 
+      orderDirection
+    );
+    
+    // Add caching headers for better performance
+    res.set({
+      'Cache-Control': 'public, max-age=300', // 5 minutes
+      'ETag': `students-${students.length}-${Date.now()}`
+    });
+    
     res.json({ 
       success: true,
       message: 'Students retrieved successfully!',
-      data: students 
+      data: students,
+      meta: {
+        count: students.length,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      }
     });
   } catch (error) {
     console.error('Error getting students:', error);

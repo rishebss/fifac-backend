@@ -4,11 +4,21 @@ const studentsCollection = db.collection('students');
 
 // Data Access Layer (Model) Functions
 
-// 1. GET ALL STUDENTS
-export const getStudents = async () => {
+// 1. GET ALL STUDENTS - OPTIMIZED with pagination
+export const getStudents = async (limit = 100, offset = 0, orderBy = 'createdAt', orderDirection = 'desc') => {
     try {
-      // Get a snapshot of the entire collection
-      const snapshot = await studentsCollection.get();
+      // OPTIMIZED: Add pagination and ordering
+      let query = studentsCollection.orderBy(orderBy, orderDirection);
+      
+      if (offset > 0) {
+        // For pagination, we'd need to implement proper cursor-based pagination
+        // For now, limit the results
+        query = query.limit(limit + offset);
+      } else {
+        query = query.limit(limit);
+      }
+      
+      const snapshot = await query.get();
   
       // If the snapshot is empty, return an empty array
       if (snapshot.empty) {
@@ -17,12 +27,17 @@ export const getStudents = async () => {
   
       // Map through the documents and return an array of student objects
       const students = [];
+      let count = 0;
+      
       snapshot.forEach(doc => {
-        // For each document, push an object containing the Firestore-generated ID and the document data
-        students.push({ 
-          id: doc.id, 
-          ...doc.data() 
-        });
+        // Skip offset number of records for simple pagination
+        if (count >= offset && students.length < limit) {
+          students.push({ 
+            id: doc.id, 
+            ...doc.data() 
+          });
+        }
+        count++;
       });
   
       return students;
@@ -83,21 +98,24 @@ export const createStudent = async (studentData) => {
     }
   }     
 
-// 4. UPDATE AN EXISTING STUDENT
+// 4. UPDATE AN EXISTING STUDENT - OPTIMIZED
 export const updateStudent = async (id, updateData) => {
     try {
       const docRef = studentsCollection.doc(id);
       
+      // Add timestamp to update data
+      const updatedData = {
+        ...updateData,
+        updatedAt: new Date().toISOString()
+      };
+      
       // Update the document with the provided data
-      await docRef.update(updateData);
+      await docRef.update(updatedData);
       
-      // Fetch the updated document to return the latest data
-      const updatedDoc = await docRef.get();
-      
-      // Return the updated student data with its ID
+      // OPTIMIZED: Return constructed object instead of fetching again
       return { 
-        id: updatedDoc.id, 
-        ...updatedDoc.data() 
+        id: id,
+        ...updatedData
       };
   
     } catch (error) {

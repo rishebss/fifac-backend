@@ -88,20 +88,24 @@ export const createLead = async (leadData) => {
   }
 };
 
-// 4. UPDATE A LEAD
+// 4. UPDATE A LEAD - OPTIMIZED
 export const updateLead = async (id, updateData) => {
   try {
     const docRef = leadsCollection.doc(id);
     
+    // Add timestamp to update data
+    const updatedData = {
+      ...updateData,
+      updatedAt: new Date().toISOString()
+    };
+    
     // Update the document with the new data
-    await docRef.update(updateData);
+    await docRef.update(updatedData);
     
-    // Fetch the updated document to return the latest data
-    const updatedDoc = await docRef.get();
-    
+    // OPTIMIZED: Return constructed object instead of fetching again
     return { 
-      id: updatedDoc.id, 
-      ...updatedDoc.data() 
+      id: id,
+      ...updatedData
     };
 
   } catch (error) {
