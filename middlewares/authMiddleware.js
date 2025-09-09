@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
-import { db } from '../config/firebase.js';
 
-export const authenticateToken = async (req, res, next) => {
+export const authenticateToken = (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     
@@ -14,17 +13,9 @@ export const authenticateToken = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Verify user exists
-    const userDoc = await db.collection('users').doc(decoded.userId).get();
-    
-    if (!userDoc.exists) {
-      return res.status(401).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
-
-    req.user = { id: userDoc.id, ...userDoc.data() };
+    // JWT validation is sufficient - no need to query database every time
+    // The token already contains verified user information
+    req.user = { id: decoded.userId, email: decoded.email, username: decoded.username, ...decoded };
     next();
 
   } catch (error) {

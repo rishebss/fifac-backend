@@ -1,12 +1,9 @@
 import express from 'express';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { db } from '../config/firebase.js';
 
 const router = express.Router();
-const usersCollection = db.collection('users');
 
-// POST /api/auth/login - User login
+// POST /api/auth/login - Environment-based authentication
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -19,50 +16,38 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Find user by username
-    const snapshot = await usersCollection
-      .where('username', '==', username)
-      .limit(1)
-      .get();
+    // Check against environment variables
+    if (username === process.env.ADMIN_USERNAME && password === process.env.ADMIN_PASSWORD) {
+      // Generate JWT token
+      const token = jwt.sign(
+        { 
+          userId: 'admin', 
+          username: username,
+          isAdmin: true 
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '3h' }
+      );
 
-    if (snapshot.empty) {
+      // Return success response
+      res.json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          user: { 
+            id: 'admin', 
+            username: username, 
+            isAdmin: true 
+          },
+          token
+        }
+      });
+    } else {
       return res.status(401).json({
         success: false,
         error: 'Invalid credentials'
       });
     }
-
-    const userDoc = snapshot.docs[0];
-    const user = { id: userDoc.id, ...userDoc.data() };
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid credentials'
-      });
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, username: user.username },
-      process.env.JWT_SECRET,
-      { expiresIn: '3h' }
-    );
-
-    // Return success response (remove password from response)
-    const { password: _, ...userWithoutPassword } = user;
-    
-    res.json({
-      success: true,
-      message: 'Login successful',
-      data: {
-        user: userWithoutPassword,
-        token
-      }
-    });
 
   } catch (error) {
     console.error('Login error:', error);
@@ -73,7 +58,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/verify - Verify token
+// GET /api/auth/verify - Verify token (simplified)
 router.get('/verify', async (req, res) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
@@ -85,22 +70,20 @@ router.get('/verify', async (req, res) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // Verify user still exists
-    const userDoc = await usersCollection.doc(decoded.userId).get();
-    
-    if (!userDoc.exists) {
-      return res.status(401).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
-
+    // For environment-based auth, we don't need to check database
+    // JWT validation is sufficient
     res.json({
       success: true,
       message: 'Token is valid',
-      data: { user: { id: userDoc.id, ...userDoc.data() } }
+      data: { 
+        user: { 
+          id: decoded.userId, 
+          username: decoded.username, 
+          isAdmin: decoded.isAdmin || false 
+        } 
+      }
     });
 
   } catch (error) {
