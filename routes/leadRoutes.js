@@ -84,7 +84,7 @@ router.post('/', authenticateToken, async (req, res) => {
       });
     }
     
-    const newLead = await createLead({ name, phone });
+    const newLead = await createLead({ name, phone, source });
     
     res.status(201).json({ 
       success: true,
