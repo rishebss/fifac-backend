@@ -74,7 +74,7 @@ router.post('/', authenticateToken, async (req, res) => {
   try {
     console.log('Received POST request to create lead:', req.body);
     
-    const { name,phone } = req.body;
+    const { name,phone,source } = req.body;
     
     // Validate required fields
     if (!name || !phone) {
