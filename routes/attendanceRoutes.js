@@ -105,7 +105,15 @@ router.post('/', authenticateToken, async (req, res) => {
   try {
     const { studentId, date, status, notes } = req.body;
     
+    console.log('🏁 Marking attendance request:', {
+      studentId, 
+      date, 
+      status, 
+      notes: notes ? 'has notes' : 'no notes'
+    });
+    
     if (!studentId || !date || !status) {
+      console.log('❌ Missing required fields for attendance marking');
       return res.status(400).json({ 
         success: false,
         error: 'Student ID, date, and status are required fields.' 
@@ -119,6 +127,7 @@ router.post('/', authenticateToken, async (req, res) => {
       notes: notes || ''
     });
     
+    console.log('✅ Successfully marked attendance');
     res.status(201).json({ 
       success: true,
       message: 'Attendance marked',
@@ -126,10 +135,12 @@ router.post('/', authenticateToken, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error marking attendance:', error);
+    console.error('❌ Error marking attendance:', error);
+    console.error('❌ Error stack:', error.stack);
     res.status(500).json({ 
       success: false,
-      error: 'Failed to mark attendance.' 
+      error: 'Failed to mark attendance.',
+      details: error.message
     });
   }
 });

@@ -104,16 +104,21 @@ const getStudentAttendanceFallback = async (studentId, year, month) => {
   }
 };
 
-// 2. MARK ATTENDANCE - OPTIMIZED
+// 2. MARK ATTENDANCE - OPTIMIZED with Enhanced Error Handling
 export const markAttendance = async (attendanceData) => {
   try {
+    console.log('🎯 Marking attendance for:', attendanceData);
+    
     // OPTIMIZED: Use precise date range query instead of fetching all records
     const inputDate = new Date(attendanceData.date);
     const startOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 0, 0, 0, 0).toISOString();
     const endOfDay = new Date(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate(), 23, 59, 59, 999).toISOString();
     
-    // Try optimized query first
+    console.log(`📅 Date range: ${startOfDay} to ${endOfDay}`);
+    
+    // Try optimized compound query first
     try {
+      console.log('🚀 Attempting optimized compound query for existing record...');
       const existingSnapshot = await attendanceCollection
         .where('studentId', '==', attendanceData.studentId)
         .where('date', '>=', startOfDay)
@@ -122,6 +127,7 @@ export const markAttendance = async (attendanceData) => {
         .get();
 
       if (!existingSnapshot.empty) {
+        console.log('✏️ Updating existing attendance record');
         // Update existing record
         const docId = existingSnapshot.docs[0].id;
         
@@ -132,46 +138,32 @@ export const markAttendance = async (attendanceData) => {
         });
         
         const updatedDoc = await attendanceCollection.doc(docId).get();
+        console.log('✅ Successfully updated attendance record');
         return { 
           id: updatedDoc.id, 
           ...updatedDoc.data() 
         };
       }
-    } catch (error) {
-      // If compound query fails, fall back to the old method
-      if (error.code === 'failed-precondition' && error.message.includes('index')) {
-        console.warn("Using fallback method for attendance check");
-        
-        const existingSnapshot = await attendanceCollection
-          .where('studentId', '==', attendanceData.studentId)
-          .get();
-        
-        const existingRecords = existingSnapshot.docs.filter(doc => {
-          const docDate = doc.data().date;
-          return docDate >= startOfDay && docDate <= endOfDay;
-        });
-
-        if (existingRecords.length > 0) {
-          const docId = existingRecords[0].id;
-          
-          await attendanceCollection.doc(docId).update({
-            status: attendanceData.status,
-            notes: attendanceData.notes || '',
-            updatedAt: new Date().toISOString()
-          });
-          
-          const updatedDoc = await attendanceCollection.doc(docId).get();
-          return { 
-            id: updatedDoc.id, 
-            ...updatedDoc.data() 
-          };
-        }
+      
+      console.log('📝 No existing record found, will create new one');
+      
+    } catch (indexError) {
+      // Check if it's specifically an index error
+      if (indexError.code === 'failed-precondition' || 
+          indexError.message.includes('index') ||
+          indexError.message.includes('composite')) {
+        console.warn('⚠️ Composite index not found, falling back to client-side filtering for attendance check');
+        return await markAttendanceFallback(attendanceData, startOfDay, endOfDay);
       } else {
-        throw error;
+        // If it's a different error, log it and try fallback anyway
+        console.error('❌ Unexpected error in optimized query:', indexError);
+        console.log('🔄 Attempting fallback method...');
+        return await markAttendanceFallback(attendanceData, startOfDay, endOfDay);
       }
     }
 
     // Create new record if none exists
+    console.log('➕ Creating new attendance record');
     const newRecord = {
       studentId: attendanceData.studentId,
       date: new Date(attendanceData.date).toISOString(),
@@ -184,14 +176,76 @@ export const markAttendance = async (attendanceData) => {
     const docRef = await attendanceCollection.add(newRecord);
     
     const newDoc = await docRef.get();
+    console.log('✅ Successfully created new attendance record');
     return { 
       id: newDoc.id, 
       ...newDoc.data() 
     };
 
   } catch (error) {
-    console.error("Error in markAttendance model:", error);
-    throw new Error('Failed to mark attendance.');
+    console.error('💥 Critical error in markAttendance model:', error);
+    console.error('💥 Error stack:', error.stack);
+    throw new Error(`Failed to mark attendance: ${error.message}`);
+  }
+};
+
+// Fallback function for marking attendance when composite index doesn't exist
+const markAttendanceFallback = async (attendanceData, startOfDay, endOfDay) => {
+  try {
+    console.log('🔄 Using fallback method for marking attendance...');
+    
+    const existingSnapshot = await attendanceCollection
+      .where('studentId', '==', attendanceData.studentId)
+      .get();
+    
+    console.log(`📦 Fallback - fetched ${existingSnapshot.size} total records for student`);
+    
+    const existingRecords = existingSnapshot.docs.filter(doc => {
+      const docDate = doc.data().date;
+      return docDate >= startOfDay && docDate <= endOfDay;
+    });
+
+    if (existingRecords.length > 0) {
+      console.log('✏️ Fallback - updating existing record');
+      const docId = existingRecords[0].id;
+      
+      await attendanceCollection.doc(docId).update({
+        status: attendanceData.status,
+        notes: attendanceData.notes || '',
+        updatedAt: new Date().toISOString()
+      });
+      
+      const updatedDoc = await attendanceCollection.doc(docId).get();
+      console.log('✅ Fallback - successfully updated attendance record');
+      return { 
+        id: updatedDoc.id, 
+        ...updatedDoc.data() 
+      };
+    }
+    
+    // Create new record if none exists
+    console.log('➕ Fallback - creating new attendance record');
+    const newRecord = {
+      studentId: attendanceData.studentId,
+      date: new Date(attendanceData.date).toISOString(),
+      status: attendanceData.status,
+      notes: attendanceData.notes || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    const docRef = await attendanceCollection.add(newRecord);
+    
+    const newDoc = await docRef.get();
+    console.log('✅ Fallback - successfully created new attendance record');
+    return { 
+      id: newDoc.id, 
+      ...newDoc.data() 
+    };
+    
+  } catch (fallbackError) {
+    console.error('💥 Error in attendance marking fallback method:', fallbackError);
+    throw new Error(`Fallback method failed: ${fallbackError.message}`);
   }
 };
 
